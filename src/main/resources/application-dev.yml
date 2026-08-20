@@ -37,15 +37,15 @@ spring:
   servlet:
     multipart:
       max-file-size: 25MB
-      max-request-size: 50B
+      max-request-size: 50MB
 
 
 
 #app configurations
 app:
   rag:
-    chunk-size: 600
-    chunk-overlap: 100
+    chunk-size: 700
+#    chunk-overlap: 100
     top-k: 5
     similarity-threshold: 0.0
 
