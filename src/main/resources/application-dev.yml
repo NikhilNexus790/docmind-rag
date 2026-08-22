@@ -55,3 +55,6 @@ app:
     allowed-headers: "*"
 
 
+
+bootui:
+  enabled: ON

@@ -56,7 +56,7 @@ public class DocumentParserService {
 
     }
 
-    private List<Document> parseGenericFile(Resource resource) {
+    private List<Document> parsePdf(Resource resource) {
 
         PdfDocumentReaderConfig config = PdfDocumentReaderConfig.builder()
                 .withPageBottomMargin(0)
@@ -67,7 +67,7 @@ public class DocumentParserService {
         return documentReader.read();
     }
 
-    private List<Document> parsePdf(Resource resource) {
+    private List<Document> parseGenericFile(Resource resource) {
         TikaDocumentReader tikaDocumentReader= new TikaDocumentReader(resource);
         return tikaDocumentReader.read();
     }

@@ -77,6 +77,7 @@ export interface Message {
   citations?: CitationDto[];
   responseTimeMs?: number;
   timestamp: Date;
+  isStreaming?: boolean;
 }
 
 export interface UploadingFile {
