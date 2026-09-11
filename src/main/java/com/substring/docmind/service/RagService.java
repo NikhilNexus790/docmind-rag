@@ -3,12 +3,15 @@ package com.substring.docmind.service;
 
 import com.substring.docmind.config.AppProperties;
 import com.substring.docmind.dto.*;
+import com.substring.docmind.entity.Conversation;
 import com.substring.docmind.entity.User;
+import com.substring.docmind.repository.ConversationRepository;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -17,6 +20,7 @@ import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,11 +36,19 @@ public class RagService {
     private final AppProperties appProperties;
     private final ChatClient chatClient;
 
+    private final ConversationRepository conversationRepository;
+
 
     //to ask any thing related to document
     public ChatResponseDto askQuestion(ChatRequestDto request, User user) {
 
         long startTime = System.currentTimeMillis();
+
+
+        String conversationId = request.getConversationId() != null ? request.getConversationId() : UUID.randomUUID().toString();
+
+        ensureConversationExists(conversationId, user, request.getQuestion());
+
         log.info("Processing query: '{}', scoped documentId: {}", request.getQuestion(), request.getDocumentId());
 
 
@@ -58,10 +70,32 @@ public class RagService {
         //you have to use conversationId to remember the conversation
         //ChatMemory
         //ChatMemoryRepository
-        String answer = this.chatClient.prompt().user(prompt).call().content();
+        String answer = this.chatClient
+                .prompt()
+                .user(prompt)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, request.getConversationId()))
+                .call().content();
         long responseTime = System.currentTimeMillis() - startTime;
         log.info("Completed Q&A in {} ms with {} citations", responseTime, citationDtos.size());
         return ChatResponseDto.builder().answer(answer).conversationId(request.getConversationId() != null ? request.getConversationId() : UUID.randomUUID().toString()).citations(citationDtos).responseTimeMs(responseTime).build();
+
+
+    }
+
+    private void ensureConversationExists(String conversationId, User user, @NotBlank(message = "Question cannot be empty") String question) {
+
+        conversationRepository.findByIdAndUser(conversationId, user)
+                .orElseGet(() -> {
+                    String title = question.length() > 50 ? question.substring(0, 47) + "....." : question;
+                    return conversationRepository.save(
+                            Conversation.builder().id(conversationId)
+                                    .title(title)
+                                    .user(user)
+                                    .createdAt(LocalDateTime.now())
+                                    .updatedAt(LocalDateTime.now())
+                                    .build()
+                    );
+                });
 
 
     }
@@ -81,6 +115,7 @@ public class RagService {
         String userPrompt = buildPrompt(requestDto.getQuestion(), contextText);
         return chatClient.prompt()
                 .user(userPrompt)
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, requestDto.getConversationId()))
                 .stream()
                 .content();
 
