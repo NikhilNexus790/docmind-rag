@@ -46,6 +46,9 @@ public class RagService {
 
         String prompt = buildPrompt(request.getQuestion(), contextText);
 
+        //you have to use conversationId to remember the conversation
+        //ChatMemory
+        //ChatMemoryRepository
         String answer = this.chatClient.prompt().user(prompt).call().content();
         long responseTime = System.currentTimeMillis() - startTime;
         log.info("Completed Q&A in {} ms with {} citations", responseTime, citationDtos.size());
