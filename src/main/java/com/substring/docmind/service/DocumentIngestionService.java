@@ -66,6 +66,8 @@ public class DocumentIngestionService {
                 enrichedMetadata.put("fileName", metadata.getFilename());
                 enrichedMetadata.put("contentType", metadata.getContentType());
                 enrichedMetadata.put("chunkIndex", i);
+//                this step is very important for user based document
+                enrichedMetadata.put("userId", metadata.getUser().getId().toString());
                 // Preserve or calculate page number if available
                 Object pageNumber = chunk.getMetadata().get("page_number");
                 if (pageNumber == null) {

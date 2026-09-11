@@ -4,13 +4,17 @@ package com.substring.docmind.controller;
 import com.substring.docmind.dto.ApiResponse;
 import com.substring.docmind.dto.DocumentMetadataDto;
 import com.substring.docmind.dto.DocumentResponseDto;
+import com.substring.docmind.entity.User;
 import com.substring.docmind.service.DocumentMetadataService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -18,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController()
 @RequestMapping("/api/v1/documents")
 @Tag(
@@ -37,12 +42,22 @@ public class DocumentController {
 
     )
     public ResponseEntity<ApiResponse<DocumentResponseDto>> uploadDocument(
-            @RequestParam("file") MultipartFile file
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+
     ) {
+
+        log.info("document uploading started:");
+        User user = (User) authentication.getPrincipal();
+//        System.out.println(user.getUsername());
+//        System.out.println(user.getEmail());
+//        System.out.println(user.getId());
+//
+
 
 
 //        process the files
-        DocumentResponseDto documentResponseDto = this.documentService.uploadAndProcess(file);
+        DocumentResponseDto documentResponseDto = this.documentService.uploadAndProcess(file,user);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.<DocumentResponseDto>builder()
                         .success(true)
@@ -59,11 +74,14 @@ public class DocumentController {
             summary = "Upload and index multiple documents simultaneously",
             description = "This api is used to upload and index multiple documents."
     )
-    public ResponseEntity<ApiResponse<List<DocumentResponseDto>>> uploadMultipole(
+    public ResponseEntity<ApiResponse<List<DocumentResponseDto>>> uploadMultiple(
             @RequestParam("files")
-            List<MultipartFile> files
+            List<MultipartFile> files,
+            Authentication authentication
     ) {
-        List<DocumentResponseDto> responseDtos = documentService.uploadMultipleDocuments(files);
+
+        User user=(User)authentication.getPrincipal();
+        List<DocumentResponseDto> responseDtos = documentService.uploadMultipleDocuments(files,user);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(
                         ApiResponse.<List<DocumentResponseDto>>
@@ -76,7 +94,32 @@ public class DocumentController {
                 );
     }
 
-//    list all uploaded documents
+
+
+
+    //    list all uploaded documents of logged in user
+    @GetMapping("/user")
+    @Operation(summary = "List all uploaded documents and their indexing status of the logged user")
+    public ResponseEntity<ApiResponse<List<DocumentMetadataDto>>> getAllDocumentOfLoggedInUser(
+            Authentication authentication
+    ){
+        User user=(User)authentication.getPrincipal();
+        java.util.List<DocumentMetadataDto> documents =documentService.getAllDocumentsByUser(user);
+        return ResponseEntity.ok(
+                ApiResponse.<List<DocumentMetadataDto>>
+                                builder()
+                        .message("All documents is here")
+                        .success(true)
+                        .timestamp(LocalDateTime.now())
+                        .data(documents)
+                        .build()
+        );
+    }
+
+
+    //    list all uploaded documents
+//    Method for admin
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     @Operation(summary = "List all uploaded documents and their indexing status")
     public ResponseEntity<ApiResponse<List<DocumentMetadataDto>>> getAllDocuments(){

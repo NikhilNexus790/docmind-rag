@@ -20,23 +20,27 @@ public class DocumentMetadata {
     private UUID id;
 
     @Column(unique = false)
-    private  String filename;
+    private String filename;
 
     @Column(nullable = false)
-    private  String contentType;
-    private  Long fileSize;
+    private String contentType;
+    private Long fileSize;
     private Integer totalPages;
-    private  Integer totalChunks;
+    private Integer totalChunks;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private DocumentStatus status;
 
     @Column(length = 1000)
-    private  String errorMessage;
+    private String errorMessage;
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    private  LocalDateTime updatedAt;
+    private LocalDateTime updatedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
 
 }
