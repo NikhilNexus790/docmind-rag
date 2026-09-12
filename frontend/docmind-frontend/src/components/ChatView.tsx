@@ -1,6 +1,19 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-java';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-sql';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-yaml';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-markdown';
 import {
   Send, Bot, User, Loader2, ChevronDown, ChevronUp, FileText,
   Zap, Sparkles, RotateCcw, Square, Copy, Check, Wifi, WifiOff,
@@ -52,6 +65,36 @@ const PROMPT_TEMPLATES = [
   },
 ];
 
+/* ─── Prism token-to-React renderer (safe, no dangerouslySetInnerHTML) ─── */
+function renderPrismTokens(tokens: (string | Prism.Token)[], keyPrefix = ''): React.ReactNode[] {
+  return tokens.map((token, idx) => {
+    const key = `${keyPrefix}-${idx}`;
+    if (typeof token === 'string') {
+      return token;
+    }
+    const className = `token ${token.type} ${Array.isArray(token.alias) ? token.alias.join(' ') : token.alias || ''}`;
+    if (typeof token.content === 'string') {
+      return (
+        <span key={key} className={className}>
+          {token.content}
+        </span>
+      );
+    }
+    if (Array.isArray(token.content)) {
+      return (
+        <span key={key} className={className}>
+          {renderPrismTokens(token.content as (string | Prism.Token)[], key)}
+        </span>
+      );
+    }
+    return (
+      <span key={key} className={className}>
+        {String(token.content)}
+      </span>
+    );
+  });
+}
+
 /* ─── Code block component ────────────────────────────────────────── */
 const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
@@ -63,55 +106,68 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
     toast.success('Code copied to clipboard');
   };
 
+  const normalizedLang = (language || 'text').toLowerCase();
+  const grammar = Prism.languages[normalizedLang] || Prism.languages.text;
+  const tokens = grammar ? Prism.tokenize(code, grammar) : [code];
+
   return (
-    <div className="my-2.5 rounded-xl border border-[#334155] bg-[#090d16] overflow-hidden text-xs">
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#141d2e] border-b border-[#334155] text-slate-400 font-mono text-[11px]">
-        <span className="font-semibold uppercase text-indigo-400">{language || 'code'}</span>
+    <div className="my-3 rounded-xl border border-[#334155] bg-[#090d16] overflow-hidden text-xs shadow-md">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-[#141d2e] border-b border-[#334155] text-slate-400 font-mono text-[11px]">
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500/70" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/70" />
+            <div className="w-2.5 h-2.5 rounded-full bg-green-500/70" />
+          </div>
+          <span className="font-semibold uppercase tracking-wider text-indigo-400 ml-1">{language || 'code'}</span>
+        </div>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+          className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-white px-2 py-1 rounded bg-[#1e293b] hover:bg-[#334155] transition-colors cursor-pointer"
         >
           {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{copied ? 'Copied' : 'Copy'}</span>
+          <span>{copied ? 'Copied!' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="p-3.5 overflow-x-auto text-slate-200 font-mono text-xs leading-relaxed">
-        <code>{code}</code>
-      </pre>
+      <div className="p-3.5 overflow-x-auto">
+        <pre className="font-mono text-xs leading-relaxed text-slate-200 m-0 p-0 bg-transparent border-0">
+          <code className={`language-${normalizedLang}`}>{renderPrismTokens(tokens, 'code')}</code>
+        </pre>
+      </div>
     </div>
   );
 };
 
 /* ─── ReactMarkdown Renderer ──────────────────────────────────────── */
-const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
+const MarkdownContent: React.FC<{ content: string; isStreaming?: boolean }> = ({ content, isStreaming }) => {
   return (
-    <div className="text-sm leading-relaxed overflow-hidden">
+    <div className="text-sm leading-relaxed overflow-hidden text-slate-200 space-y-2">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
           p({ children }) {
-            return <p className="mb-2 last:mb-0 leading-relaxed text-slate-200">{children}</p>;
+            return <p className="mb-2.5 last:mb-0 leading-relaxed text-slate-200">{children}</p>;
           },
           h1({ children }) {
-            return <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0">{children}</h1>;
+            return <h1 className="text-xl font-bold text-white mt-4 mb-2 pb-1 border-b border-[#334155] first:mt-0">{children}</h1>;
           },
           h2({ children }) {
-            return <h2 className="text-base font-bold text-white mt-3.5 mb-1.5 first:mt-0">{children}</h2>;
+            return <h2 className="text-lg font-bold text-white mt-3.5 mb-1.5 first:mt-0">{children}</h2>;
           },
           h3({ children }) {
-            return <h3 className="text-sm font-semibold text-white mt-3 mb-1 first:mt-0">{children}</h3>;
+            return <h3 className="text-base font-semibold text-slate-100 mt-3 mb-1 first:mt-0">{children}</h3>;
           },
           h4({ children }) {
-            return <h4 className="text-xs font-bold text-white uppercase tracking-wider mt-2.5 mb-1 first:mt-0">{children}</h4>;
+            return <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider mt-2.5 mb-1 first:mt-0">{children}</h4>;
           },
           ul({ children }) {
-            return <ul className="list-disc list-outside pl-4 space-y-1 mb-2.5 last:mb-0 text-slate-200">{children}</ul>;
+            return <ul className="list-disc ml-5 pl-1 space-y-1.5 my-2 text-slate-200">{children}</ul>;
           },
           ol({ children }) {
-            return <ol className="list-decimal list-outside pl-4 space-y-1 mb-2.5 last:mb-0 text-slate-200">{children}</ol>;
+            return <ol className="list-decimal ml-5 pl-1 space-y-1.5 my-2 text-slate-200">{children}</ol>;
           },
           li({ children }) {
-            return <li className="leading-relaxed">{children}</li>;
+            return <li className="leading-relaxed pl-0.5">{children}</li>;
           },
           blockquote({ children }) {
             return (
@@ -121,7 +177,7 @@ const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
             );
           },
           hr() {
-            return <hr className="border-[#334155] my-3" />;
+            return <hr className="border-[#334155] my-3.5" />;
           },
           a({ href, children }) {
             return (
@@ -146,7 +202,7 @@ const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
           },
           table({ children }) {
             return (
-              <div className="my-3 overflow-x-auto rounded-xl border border-[#334155]">
+              <div className="my-3 overflow-x-auto rounded-xl border border-[#334155] shadow-sm">
                 <table className="min-w-full divide-y divide-[#334155] text-left text-xs">{children}</table>
               </div>
             );
@@ -158,7 +214,7 @@ const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
             return <tbody className="divide-y divide-[#1e293b] bg-[#090d16]">{children}</tbody>;
           },
           th({ children }) {
-            return <th className="px-3.5 py-2 font-semibold text-white">{children}</th>;
+            return <th className="px-3.5 py-2.5 font-semibold text-white">{children}</th>;
           },
           td({ children }) {
             return <td className="px-3.5 py-2 text-slate-300">{children}</td>;
@@ -171,7 +227,7 @@ const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
               return <CodeBlock language={match ? match[1] : ''} code={codeString} />;
             }
             return (
-              <code className="px-1.5 py-0.5 bg-[#090d16] text-purple-300 rounded text-xs font-mono border border-[#334155]">
+              <code className="px-1.5 py-0.5 mx-0.5 bg-[#090d16] text-indigo-300 rounded text-[13px] font-mono border border-[#334155]">
                 {children}
               </code>
             );
@@ -183,6 +239,7 @@ const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
       >
         {content}
       </ReactMarkdown>
+      {isStreaming && <span className="cursor-blink" />}
     </div>
   );
 };
@@ -276,13 +333,8 @@ const MessageBubble: React.FC<{ message: ConversationMessage }> = ({ message }) 
         )}>
           {isUser ? (
             <p className="text-white leading-relaxed whitespace-pre-wrap">{message.content}</p>
-          ) : message.isStreaming ? (
-            <div className="text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
-              {message.content}
-              <span className="cursor-blink" />
-            </div>
           ) : (
-            <MarkdownContent key={`${message.id}-markdown`} content={message.content} />
+            <MarkdownContent content={message.content} isStreaming={message.isStreaming} />
           )}
         </div>
 
@@ -308,7 +360,7 @@ const MessageBubble: React.FC<{ message: ConversationMessage }> = ({ message }) 
               className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
               title="Copy message"
             >
-              {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
             </button>
           )}
         </div>
@@ -320,9 +372,9 @@ const MessageBubble: React.FC<{ message: ConversationMessage }> = ({ message }) 
               onClick={() => setShowCitations(!showCitations)}
               className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
             >
-              <FileText className="w-3 h-3" />
+              <FileText className="w-3.5 h-3.5" />
               {message.citations!.length} source{message.citations!.length > 1 ? 's' : ''}
-              {showCitations ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              {showCitations ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             </button>
             {showCitations && (
               <div className="mt-2 space-y-1.5 animate-fade-in">
@@ -377,12 +429,24 @@ const ChatView: React.FC = () => {
 
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedDoc = documents.find((d) => d.id === selectedDocumentId);
 
+  const handleScroll = useCallback(() => {
+    const el = chatContainerRef.current;
+    if (!el) return;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    // Keep auto-scroll active if user is near bottom (<120px)
+    shouldAutoScrollRef.current = distanceToBottom < 120;
+  }, []);
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (shouldAutoScrollRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages.length, isLoading, isStreaming]);
 
   /* ── Stream handler ── */
@@ -439,6 +503,15 @@ const ChatView: React.FC = () => {
       let buffer = '';
       let accumulated = '';
       let streamEnded = false;
+      let lastRenderTime = 0;
+      const THROTTLE_MS = 35; // 35ms buffer to avoid excessive React renders on individual tokens
+
+      const flushUpdate = (streaming: boolean) => {
+        updateLastMessageContent(convId, assistantMsgId, accumulated, streaming);
+        if (shouldAutoScrollRef.current) {
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+      };
 
       const contentType = response.headers.get('content-type') || '';
       const isEventStream = contentType.includes('text/event-stream');
@@ -451,26 +524,31 @@ const ChatView: React.FC = () => {
 
         if (isEventStream) {
           buffer += textChunk;
-          const lines = buffer.split('\n');
-          // Keep the last segment if incomplete
-          buffer = lines.pop() || '';
+          // SSE events are separated by double newlines \n\n or \r\n\r\n
+          const eventBlocks = buffer.split(/\r?\n\r?\n/);
+          // The last piece is either incomplete or trailing after the delimiter
+          buffer = eventBlocks.pop() || '';
 
-          for (const line of lines) {
-            const cleanLine = line.replace(/\r$/, '');
-            if (cleanLine.startsWith('data:')) {
-              let data = cleanLine.slice(5);
-              if (data.startsWith(' ')) {
-                data = data.slice(1);
+          for (const block of eventBlocks) {
+            if (!block) continue;
+
+            const lines = block.split(/\r?\n/);
+            const dataLines: string[] = [];
+
+            for (const line of lines) {
+              if (line.startsWith('data:')) {
+                const data = line.slice(5);
+                dataLines.push(data);
               }
+            }
 
-              if (data.trim() === '[DONE]') {
+            if (dataLines.length > 0) {
+              const eventData = dataLines.join('\n');
+              if (eventData.trim() === '[DONE]') {
                 streamEnded = true;
                 break;
               }
-
-              accumulated += data;
-              updateLastMessageContent(convId, assistantMsgId, accumulated, true);
-              bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+              accumulated += eventData;
             }
           }
         } else {
@@ -480,17 +558,30 @@ const ChatView: React.FC = () => {
           } else {
             accumulated += textChunk;
           }
-          updateLastMessageContent(convId, assistantMsgId, accumulated, true);
-          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        const now = Date.now();
+        if (now - lastRenderTime >= THROTTLE_MS || streamEnded) {
+          lastRenderTime = now;
+          flushUpdate(true);
         }
       }
 
       // Flush remaining SSE buffer if any
-      if (!streamEnded && isEventStream && buffer.trimEnd().startsWith('data:')) {
-        let data = buffer.trimEnd().slice(5);
-        if (data.startsWith(' ')) data = data.slice(1);
-        if (data.trim() !== '[DONE]') {
-          accumulated += data;
+      if (!streamEnded && isEventStream && buffer.trim()) {
+        const lines = buffer.split(/\r?\n/);
+        const dataLines: string[] = [];
+        for (const line of lines) {
+          if (line.startsWith('data:')) {
+            const data = line.slice(5);
+            dataLines.push(data);
+          }
+        }
+        if (dataLines.length > 0) {
+          const eventData = dataLines.join('\n');
+          if (eventData.trim() !== '[DONE]') {
+            accumulated += eventData;
+          }
         }
       }
 
@@ -502,10 +593,13 @@ const ChatView: React.FC = () => {
 
       const responseTimeMs = Date.now() - startTime;
 
-      // Stream completed — IMMEDIATELY remove streaming state so "AI is responding…" disappears
+      // Stream completed — IMMEDIATELY remove streaming state
       setIsStreaming(false);
       abortRef.current = null;
       updateLastMessageContent(convId, assistantMsgId, accumulated, false);
+      if (shouldAutoScrollRef.current) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }
 
       // Attach citations once similarity search finishes in background
       const simRes = await citationPromise;
@@ -656,7 +750,7 @@ const ChatView: React.FC = () => {
       </div>
 
       {/* ── Messages area ── */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+      <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
         {/* Welcome screen */}
         {messages.length === 0 && showTemplates && (
           <div className="animate-fade-in max-w-2xl mx-auto">

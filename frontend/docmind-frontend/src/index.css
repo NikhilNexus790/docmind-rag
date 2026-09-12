@@ -179,3 +179,15 @@ input[type=range]::-webkit-slider-thumb {
 input[type=range]:hover::-webkit-slider-thumb {
   box-shadow: 0 0 0 2px #0f172a, 0 0 0 4px #6366f1;
 }
+
+/* ─── Prism Syntax Highlighting ─── */
+.token.comment, .token.prolog, .token.doctype, .token.cdata { color: #64748b; font-style: italic; }
+.token.punctuation { color: #94a3b8; }
+.token.property, .token.tag, .token.boolean, .token.number, .token.constant, .token.symbol, .token.deleted { color: #f43f5e; }
+.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted { color: #34d399; }
+.token.operator, .token.entity, .token.url, .language-css .token.string, .style .token.string { color: #38bdf8; }
+.token.atrule, .token.attr-value, .token.keyword { color: #818cf8; font-weight: 500; }
+.token.function, .token.class-name { color: #f59e0b; }
+.token.regex, .token.important, .token.variable { color: #fb923c; }
+.token.important, .token.bold { font-weight: bold; }
+.token.italic { font-style: italic; }
