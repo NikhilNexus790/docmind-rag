@@ -11,6 +11,7 @@ import SearchView from './components/SearchView';
 import ChunksView from './components/ChunksView';
 import UploadDialog from './components/UploadDialog';
 import ProtectedRoute from './components/ProtectedRoute';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -50,8 +51,9 @@ const Dashboard: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <BrowserRouter>
-      <Routes>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -82,6 +84,7 @@ const App: React.FC = () => {
         }}
       />
     </BrowserRouter>
+  </ErrorBoundary>
   );
 };
 

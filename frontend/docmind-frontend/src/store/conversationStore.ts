@@ -15,6 +15,7 @@ interface ConversationState {
   selectChat: (id: string) => Promise<void>;
   newChat: () => void;
   deleteChat: (id: string) => Promise<void>;
+  renameChat: (id: string, newTitle: string) => Promise<void>;
   appendMessage: (
     conversationId: string,
     message: ConversationMessage,
@@ -127,13 +128,22 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
         activeConversationId: nextActiveId,
       };
     });
+  },
 
-    const activeId = get().activeConversationId;
-    if (activeId && !get().messages[activeId] && userId !== 'anonymous') {
-      const msgs = await conversationApi.getMessages(userId, activeId);
-      set((state) => ({
-        messages: { ...state.messages, [activeId]: msgs },
-      }));
+  renameChat: async (id: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!trimmed) return;
+    const userId = getUserId();
+    const chat = get().conversations.find((c) => c.id === id);
+    if (!chat) return;
+
+    const updatedChat = { ...chat, title: trimmed, updatedAt: new Date().toISOString() };
+    set((state) => ({
+      conversations: state.conversations.map((c) => (c.id === id ? updatedChat : c)),
+    }));
+
+    if (userId !== 'anonymous') {
+      await conversationApi.saveConversation(userId, updatedChat);
     }
   },
 
