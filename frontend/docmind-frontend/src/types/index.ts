@@ -7,6 +7,29 @@ export interface ApiResponse<T> {
   timestamp: string;
 }
 
+export interface UserDto {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  accessToken: string;
+  user: UserDto;
+}
+
 export type DocumentStatus = 'UPLOADING' | 'PROCESSING' | 'INDEXED' | 'FAILED';
 
 export interface DocumentMetadataDto {
@@ -69,6 +92,24 @@ export interface SearchResultDto {
   matches: CitationDto[];
 }
 
+// Conversation and Message Types
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  messageType: 'USER' | 'ASSISTANT' | 'SYSTEM';
+  content: string;
+  createdAt: string;
+  citations?: CitationDto[];
+  responseTimeMs?: number;
+  isStreaming?: boolean;
+}
+
 // UI Types
 export interface Message {
   id: string;
@@ -88,3 +129,4 @@ export interface UploadingFile {
   error?: string;
   result?: DocumentResponseDto;
 }
+

@@ -1,16 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { AppProvider, useApp } from './context/AppContext';
+import { useDocumentStore } from './store/documentStore';
+import { useConversationStore } from './store/conversationStore';
+import { useAuthStore } from './store/authStore';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import SearchView from './components/SearchView';
 import ChunksView from './components/ChunksView';
 import UploadDialog from './components/UploadDialog';
+import ProtectedRoute from './components/ProtectedRoute';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
-const AppContent: React.FC = () => {
-  const { activeTab } = useApp();
+const Dashboard: React.FC = () => {
+  const { activeTab, fetchDocuments } = useDocumentStore();
+  const { loadChats } = useConversationStore();
+  const token = useAuthStore((state) => state.token);
+  const user = useAuthStore((state) => state.user);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+
+  useEffect(() => {
+    if (token && user) {
+      fetchDocuments();
+      loadChats();
+    }
+  }, [token, user, fetchDocuments, loadChats]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f172a]">
@@ -34,8 +50,19 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AppProvider>
-      <AppContent />
+    <BrowserRouter>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Protected Application Routes */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+
       <Toaster
         position="bottom-right"
         toastOptions={{
@@ -54,7 +81,7 @@ const App: React.FC = () => {
           },
         }}
       />
-    </AppProvider>
+    </BrowserRouter>
   );
 };
 

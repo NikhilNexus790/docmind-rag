@@ -105,6 +105,10 @@ public class RagService {
     // this streams
     public Flux<String> streamQuestionAnswer(ChatRequestDto requestDto, User user) {
         log.info("Streaming query: '{}'", requestDto.getQuestion());
+        String conversationId = requestDto.getConversationId() != null ? requestDto.getConversationId() : UUID.randomUUID().toString();
+        requestDto.setConversationId(conversationId);
+        ensureConversationExists(conversationId, user, requestDto.getQuestion());
+
         List<Document> relevantDocuments = retrieveRelevantDocuments(
                 requestDto.getQuestion(),
                 requestDto.getDocumentId(),
@@ -119,7 +123,8 @@ public class RagService {
                 .user(requestDto.getQuestion())
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, requestDto.getConversationId()))
                 .stream()
-                .content();
+                .content()
+                .concatWith(Flux.just("[DONE]"));
 
 
     }

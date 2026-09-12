@@ -92,7 +92,7 @@ public class JpaChatMemory implements ChatMemory {
             return Collections.emptyList();
         }
 
-        all.sort(Comparator.comparing(ChatMessage::getCreatedAt).reversed());
+        all.sort(Comparator.comparing(ChatMessage::getCreatedAt));
 
 
         List<Message> springAIMessages = new ArrayList<>();

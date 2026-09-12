@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   Send, Bot, User, Loader2, ChevronDown, ChevronUp, FileText,
   Zap, Sparkles, RotateCcw, Square, Copy, Check, Wifi, WifiOff,
-  AlertTriangle, ThumbsUp, MoreHorizontal,
 } from 'lucide-react';
 import { chatApi } from '../services/api';
-import { useApp } from '../context/AppContext';
-import type { Message, CitationDto } from '../types';
+import { useDocumentStore } from '../store/documentStore';
+import { useConversationStore } from '../store/conversationStore';
+import type { ConversationMessage, CitationDto } from '../types';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -50,75 +52,140 @@ const PROMPT_TEMPLATES = [
   },
 ];
 
-/* ─── Markdown renderer ─────────────────────────────────────────── */
-function renderMarkdown(content: string): React.ReactNode[] {
-  const lines = content.split('\n');
-  const nodes: React.ReactNode[] = [];
-  let i = 0;
+/* ─── Code block component ────────────────────────────────────────── */
+const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
+  const [copied, setCopied] = useState(false);
 
-  const renderInline = (text: string): React.ReactNode => {
-    const parts = text.split(/(\*\*.*?\*\*|`.*?`|\*.*?\*|_.*?_)/g);
-    return parts.map((part, j) => {
-      if (part.startsWith('**') && part.endsWith('**')) return <strong key={j} className="font-semibold text-white">{part.slice(2, -2)}</strong>;
-      if (part.startsWith('*') && part.endsWith('*') && part.length > 2) return <em key={j} className="italic text-slate-300">{part.slice(1, -1)}</em>;
-      if (part.startsWith('_') && part.endsWith('_') && part.length > 2) return <em key={j} className="italic text-slate-300">{part.slice(1, -1)}</em>;
-      if (part.startsWith('`') && part.endsWith('`') && part.length > 2) return <code key={j} className="px-1.5 py-0.5 bg-[#0f172a] text-purple-300 rounded text-xs font-mono border border-[#334155]">{part.slice(1, -1)}</code>;
-      return part;
-    });
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success('Code copied to clipboard');
   };
 
-  while (i < lines.length) {
-    const line = lines[i];
+  return (
+    <div className="my-2.5 rounded-xl border border-[#334155] bg-[#090d16] overflow-hidden text-xs">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-[#141d2e] border-b border-[#334155] text-slate-400 font-mono text-[11px]">
+        <span className="font-semibold uppercase text-indigo-400">{language || 'code'}</span>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+      <pre className="p-3.5 overflow-x-auto text-slate-200 font-mono text-xs leading-relaxed">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+};
 
-    if (line.startsWith('### ')) { nodes.push(<h3 key={i} className="text-sm font-semibold text-white mt-3 mb-1">{renderInline(line.slice(4))}</h3>); i++; continue; }
-    if (line.startsWith('## '))  { nodes.push(<h2 key={i} className="text-base font-semibold text-white mt-3 mb-1">{renderInline(line.slice(3))}</h2>); i++; continue; }
-    if (line.startsWith('# '))   { nodes.push(<h1 key={i} className="text-lg font-bold text-white mt-3 mb-1">{renderInline(line.slice(2))}</h1>); i++; continue; }
-    if (line.startsWith('> '))   { nodes.push(<blockquote key={i} className="border-l-2 border-indigo-500 pl-3 text-slate-400 italic my-1">{renderInline(line.slice(2))}</blockquote>); i++; continue; }
-    if (line.startsWith('---'))  { nodes.push(<hr key={i} className="border-[#334155] my-2" />); i++; continue; }
-
-    // Code block
-    if (line.startsWith('```')) {
-      const lang = line.slice(3);
-      const codeLines: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i].startsWith('```')) { codeLines.push(lines[i]); i++; }
-      nodes.push(
-        <pre key={i} className="bg-[#0f172a] border border-[#334155] rounded-xl px-4 py-3 overflow-x-auto my-2">
-          {lang && <div className="text-[10px] text-slate-500 mb-1.5 uppercase font-mono">{lang}</div>}
-          <code className="text-xs text-slate-200 font-mono leading-relaxed whitespace-pre">{codeLines.join('\n')}</code>
-        </pre>
-      );
-      i++; continue;
-    }
-
-    // Bullet list
-    if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('• ')) {
-      const items: React.ReactNode[] = [];
-      while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* ') || lines[i].startsWith('• '))) {
-        items.push(<li key={i}>{renderInline(lines[i].slice(2))}</li>);
-        i++;
-      }
-      nodes.push(<ul key={`ul-${i}`} className="list-disc list-inside space-y-0.5 ml-1 my-1 text-slate-200">{items}</ul>);
-      continue;
-    }
-
-    // Numbered list
-    if (/^\d+\. /.test(line)) {
-      const items: React.ReactNode[] = [];
-      while (i < lines.length && /^\d+\. /.test(lines[i])) {
-        items.push(<li key={i}>{renderInline(lines[i].replace(/^\d+\. /, ''))}</li>);
-        i++;
-      }
-      nodes.push(<ol key={`ol-${i}`} className="list-decimal list-inside space-y-0.5 ml-1 my-1 text-slate-200">{items}</ol>);
-      continue;
-    }
-
-    if (line === '') { nodes.push(<div key={i} className="h-1.5" />); i++; continue; }
-    nodes.push(<p key={i} className="text-slate-200 leading-relaxed">{renderInline(line)}</p>);
-    i++;
-  }
-  return nodes;
-}
+/* ─── ReactMarkdown Renderer ──────────────────────────────────────── */
+const MarkdownContent: React.FC<{ content: string }> = ({ content }) => {
+  return (
+    <div className="text-sm leading-relaxed overflow-hidden">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p({ children }) {
+            return <p className="mb-2 last:mb-0 leading-relaxed text-slate-200">{children}</p>;
+          },
+          h1({ children }) {
+            return <h1 className="text-lg font-bold text-white mt-4 mb-2 first:mt-0">{children}</h1>;
+          },
+          h2({ children }) {
+            return <h2 className="text-base font-bold text-white mt-3.5 mb-1.5 first:mt-0">{children}</h2>;
+          },
+          h3({ children }) {
+            return <h3 className="text-sm font-semibold text-white mt-3 mb-1 first:mt-0">{children}</h3>;
+          },
+          h4({ children }) {
+            return <h4 className="text-xs font-bold text-white uppercase tracking-wider mt-2.5 mb-1 first:mt-0">{children}</h4>;
+          },
+          ul({ children }) {
+            return <ul className="list-disc list-outside pl-4 space-y-1 mb-2.5 last:mb-0 text-slate-200">{children}</ul>;
+          },
+          ol({ children }) {
+            return <ol className="list-decimal list-outside pl-4 space-y-1 mb-2.5 last:mb-0 text-slate-200">{children}</ol>;
+          },
+          li({ children }) {
+            return <li className="leading-relaxed">{children}</li>;
+          },
+          blockquote({ children }) {
+            return (
+              <blockquote className="border-l-4 border-indigo-500 bg-indigo-500/10 px-3.5 py-2 rounded-r-lg text-slate-300 italic my-2.5 text-xs leading-relaxed">
+                {children}
+              </blockquote>
+            );
+          },
+          hr() {
+            return <hr className="border-[#334155] my-3" />;
+          },
+          a({ href, children }) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors font-medium"
+              >
+                {children}
+              </a>
+            );
+          },
+          strong({ children }) {
+            return <strong className="font-semibold text-white">{children}</strong>;
+          },
+          em({ children }) {
+            return <em className="italic text-slate-300">{children}</em>;
+          },
+          del({ children }) {
+            return <del className="line-through text-slate-400">{children}</del>;
+          },
+          table({ children }) {
+            return (
+              <div className="my-3 overflow-x-auto rounded-xl border border-[#334155]">
+                <table className="min-w-full divide-y divide-[#334155] text-left text-xs">{children}</table>
+              </div>
+            );
+          },
+          thead({ children }) {
+            return <thead className="bg-[#141d2e]">{children}</thead>;
+          },
+          tbody({ children }) {
+            return <tbody className="divide-y divide-[#1e293b] bg-[#090d16]">{children}</tbody>;
+          },
+          th({ children }) {
+            return <th className="px-3.5 py-2 font-semibold text-white">{children}</th>;
+          },
+          td({ children }) {
+            return <td className="px-3.5 py-2 text-slate-300">{children}</td>;
+          },
+          code({ className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || '');
+            const codeString = String(children).replace(/\n$/, '');
+            const isMultiLine = codeString.includes('\n');
+            if (match || isMultiLine) {
+              return <CodeBlock language={match ? match[1] : ''} code={codeString} />;
+            }
+            return (
+              <code className="px-1.5 py-0.5 bg-[#090d16] text-purple-300 rounded text-xs font-mono border border-[#334155]">
+                {children}
+              </code>
+            );
+          },
+          pre({ children }) {
+            return <>{children}</>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+};
 
 /* ─── Citation card ─────────────────────────────────────────────── */
 const CitationCard: React.FC<{ citation: CitationDto; index: number }> = ({ citation, index }) => {
@@ -135,7 +202,7 @@ const CitationCard: React.FC<{ citation: CitationDto; index: number }> = ({ cita
     <div className="border border-[#334155] rounded-xl overflow-hidden bg-[#0f172a] hover:border-[#475569] transition-colors">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2.5 p-2.5 text-left"
+        className="w-full flex items-center gap-2.5 p-2.5 text-left cursor-pointer"
       >
         <span className="flex-shrink-0 w-5 h-5 bg-indigo-500/15 text-indigo-400 rounded-md text-xs flex items-center justify-center font-bold border border-indigo-500/20">
           {index + 1}
@@ -166,8 +233,8 @@ const CitationCard: React.FC<{ citation: CitationDto; index: number }> = ({ cita
 };
 
 /* ─── Message bubble ────────────────────────────────────────────── */
-const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
-  const isUser = message.role === 'user';
+const MessageBubble: React.FC<{ message: ConversationMessage }> = ({ message }) => {
+  const isUser = message.messageType === 'USER';
   const [showCitations, setShowCitations] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showTime, setShowTime] = useState(false);
@@ -179,7 +246,9 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
     toast.success('Copied to clipboard');
   };
 
-  const timeStr = message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const timeStr = message.createdAt
+    ? new Date(message.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    : '';
 
   return (
     <div
@@ -205,24 +274,28 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
             ? 'bg-indigo-600 text-white rounded-tr-sm shadow-sm shadow-indigo-500/20'
             : 'bg-[#1e293b] border border-[#334155] rounded-tl-sm'
         )}>
-          <div className="space-y-0.5">
-            {isUser
-              ? <p className="text-white leading-relaxed">{message.content}</p>
-              : renderMarkdown(message.content)
-            }
-          </div>
-          {/* Streaming cursor */}
-          {message.isStreaming && <span className="cursor-blink" />}
+          {isUser ? (
+            <p className="text-white leading-relaxed whitespace-pre-wrap">{message.content}</p>
+          ) : message.isStreaming ? (
+            <div className="text-slate-200 leading-relaxed whitespace-pre-wrap font-sans">
+              {message.content}
+              <span className="cursor-blink" />
+            </div>
+          ) : (
+            <MarkdownContent key={`${message.id}-markdown`} content={message.content} />
+          )}
         </div>
 
         {/* Footer: citations + actions */}
         <div className={clsx('flex items-center gap-2 mt-1.5', isUser ? 'justify-end' : 'justify-start')}>
           {/* Timestamp */}
-          <span className={clsx('text-xs text-slate-600 transition-opacity', showTime ? 'opacity-100' : 'opacity-0')}>
-            {timeStr}
-          </span>
+          {timeStr && (
+            <span className={clsx('text-xs text-slate-600 transition-opacity', showTime ? 'opacity-100' : 'opacity-0')}>
+              {timeStr}
+            </span>
+          )}
 
-          {!isUser && message.responseTimeMs && (
+          {!isUser && message.responseTimeMs !== undefined && message.responseTimeMs > 0 && (
             <span className="flex items-center gap-1 text-xs text-slate-600">
               <Zap className="w-2.5 h-2.5" />{message.responseTimeMs}ms
             </span>
@@ -232,7 +305,8 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
           {!isUser && !message.isStreaming && message.content && (
             <button
               onClick={handleCopy}
-              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-all"
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-all cursor-pointer"
+              title="Copy message"
             >
               {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
             </button>
@@ -244,7 +318,7 @@ const MessageBubble: React.FC<{ message: Message }> = ({ message }) => {
           <div className="mt-2">
             <button
               onClick={() => setShowCitations(!showCitations)}
-              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
             >
               <FileText className="w-3 h-3" />
               {message.citations!.length} source{message.citations!.length > 1 ? 's' : ''}
@@ -282,14 +356,25 @@ const TypingIndicator = () => (
 
 /* ─── Main ChatView ──────────────────────────────────────────────── */
 const ChatView: React.FC = () => {
-  const { selectedDocumentId, documents } = useApp();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { selectedDocumentId, documents } = useDocumentStore();
+  const {
+    activeConversationId,
+    messages: allMessages,
+    streamingMode,
+    setStreamingMode,
+    appendMessage,
+    updateLastMessageContent,
+    updateMessageMetadata,
+    newChat,
+  } = useConversationStore();
+
+  const messages = allMessages[activeConversationId] || [];
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingMode, setStreamingMode] = useState(true);
-  const [conversationId, setConversationId] = useState<string | undefined>();
   const [showTemplates, setShowTemplates] = useState(true);
+
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -298,160 +383,224 @@ const ChatView: React.FC = () => {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages.length, isLoading, isStreaming]);
 
   /* ── Stream handler ── */
-  const sendStreaming = useCallback(async (question: string) => {
-    const msgId = crypto.randomUUID();
-    // Add empty streaming assistant bubble
-    setMessages((prev) => [
-      ...prev,
-      { id: msgId, role: 'assistant', content: '', isStreaming: true, timestamp: new Date() },
-    ]);
+  const sendStreaming = useCallback(async (question: string, convId: string) => {
+    const assistantMsgId = crypto.randomUUID();
+    const startTime = Date.now();
+
+    // Append empty streaming assistant bubble
+    await appendMessage(convId, {
+      id: assistantMsgId,
+      messageType: 'ASSISTANT',
+      content: '',
+      createdAt: new Date().toISOString(),
+      isStreaming: true,
+    });
+
     setIsStreaming(true);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
+    // Fetch citations in parallel so it doesn't block UI after streaming ends
+    const citationPromise = chatApi.searchSimilarity({
+      query: question,
+      documentId: selectedDocumentId ?? undefined,
+      topK: 5,
+    }).catch(() => null);
+
     try {
-      const response = await fetch('/api/v1/chat/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const response = await chatApi.stream(
+        {
           question,
           documentId: selectedDocumentId ?? undefined,
           topK: 5,
-          conversationId,
-        }),
-        signal: controller.signal,
-      });
+          conversationId: convId,
+        },
+        controller.signal
+      );
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        let errorDetail = `HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData?.message) errorDetail = errData.message;
+        } catch {
+          // ignore JSON parsing errors
+        }
+        throw new Error(errorDetail);
+      }
       if (!response.body) throw new Error('No response body');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
       let accumulated = '';
+      let streamEnded = false;
 
-      while (true) {
+      const contentType = response.headers.get('content-type') || '';
+      const isEventStream = contentType.includes('text/event-stream');
+
+      while (!streamEnded) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        accumulated += chunk;
-        setMessages((prev) =>
-          prev.map((m) => m.id === msgId ? { ...m, content: accumulated } : m)
-        );
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+        const textChunk = decoder.decode(value, { stream: true });
+
+        if (isEventStream) {
+          buffer += textChunk;
+          const lines = buffer.split('\n');
+          // Keep the last segment if incomplete
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const cleanLine = line.replace(/\r$/, '');
+            if (cleanLine.startsWith('data:')) {
+              let data = cleanLine.slice(5);
+              if (data.startsWith(' ')) {
+                data = data.slice(1);
+              }
+
+              if (data.trim() === '[DONE]') {
+                streamEnded = true;
+                break;
+              }
+
+              accumulated += data;
+              updateLastMessageContent(convId, assistantMsgId, accumulated, true);
+              bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }
+        } else {
+          if (textChunk.includes('[DONE]')) {
+            accumulated += textChunk.replace('[DONE]', '');
+            streamEnded = true;
+          } else {
+            accumulated += textChunk;
+          }
+          updateLastMessageContent(convId, assistantMsgId, accumulated, true);
+          bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }
       }
 
-      // Mark done, then fetch citations in background
-      setMessages((prev) =>
-        prev.map((m) => m.id === msgId ? { ...m, isStreaming: false } : m)
-      );
+      // Flush remaining SSE buffer if any
+      if (!streamEnded && isEventStream && buffer.trimEnd().startsWith('data:')) {
+        let data = buffer.trimEnd().slice(5);
+        if (data.startsWith(' ')) data = data.slice(1);
+        if (data.trim() !== '[DONE]') {
+          accumulated += data;
+        }
+      }
 
-      // Fetch citations from normal query endpoint
       try {
-        const citRes = await chatApi.query({
-          question,
-          documentId: selectedDocumentId ?? undefined,
-          topK: 5,
-          conversationId,
-        });
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? { ...m, citations: citRes.data.citations, responseTimeMs: citRes.data.responseTimeMs }
-              : m
-          )
-        );
-        if (citRes.data.conversationId) setConversationId(citRes.data.conversationId);
+        await reader.cancel();
       } catch {
-        // citations failed silently — answer already shown
+        // Ignore reader cancellation error
+      }
+
+      const responseTimeMs = Date.now() - startTime;
+
+      // Stream completed — IMMEDIATELY remove streaming state so "AI is responding…" disappears
+      setIsStreaming(false);
+      abortRef.current = null;
+      updateLastMessageContent(convId, assistantMsgId, accumulated, false);
+
+      // Attach citations once similarity search finishes in background
+      const simRes = await citationPromise;
+      if (simRes?.data?.matches?.length) {
+        await updateMessageMetadata(convId, assistantMsgId, {
+          citations: simRes.data.matches,
+          responseTimeMs,
+          isStreaming: false,
+        });
+      } else {
+        await updateMessageMetadata(convId, assistantMsgId, {
+          responseTimeMs,
+          isStreaming: false,
+        });
       }
 
     } catch (err: unknown) {
       if ((err as Error).name === 'AbortError') {
-        setMessages((prev) =>
-          prev.map((m) => m.id === msgId ? { ...m, isStreaming: false } : m)
-        );
+        updateLastMessageContent(convId, assistantMsgId, 'Response generation stopped.', false);
       } else {
         const msg = err instanceof Error ? err.message : 'Stream failed';
         toast.error(msg);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === msgId
-              ? { ...m, content: m.content || `❌ ${msg}`, isStreaming: false }
-              : m
-          )
-        );
+        updateLastMessageContent(convId, assistantMsgId, `❌ ${msg}`, false);
       }
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [selectedDocumentId, conversationId]);
+  }, [selectedDocumentId, appendMessage, updateLastMessageContent, updateMessageMetadata]);
 
   /* ── Normal query handler ── */
-  const sendNormal = useCallback(async (question: string) => {
+  const sendNormal = useCallback(async (question: string, convId: string) => {
     setIsLoading(true);
     try {
       const res = await chatApi.query({
         question,
         documentId: selectedDocumentId ?? undefined,
         topK: 5,
-        conversationId,
+        conversationId: convId,
       });
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: res.data.answer,
-          citations: res.data.citations,
-          responseTimeMs: res.data.responseTimeMs,
-          timestamp: new Date(),
-        },
-      ]);
-      if (res.data.conversationId) setConversationId(res.data.conversationId);
+
+      await appendMessage(convId, {
+        id: crypto.randomUUID(),
+        messageType: 'ASSISTANT',
+        content: res.data.answer,
+        citations: res.data.citations,
+        responseTimeMs: res.data.responseTimeMs,
+        createdAt: new Date().toISOString(),
+      });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Something went wrong';
       toast.error(msg);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), role: 'assistant', content: `❌ ${msg}`, timestamp: new Date() },
-      ]);
+      await appendMessage(convId, {
+        id: crypto.randomUUID(),
+        messageType: 'ASSISTANT',
+        content: `❌ ${msg}`,
+        createdAt: new Date().toISOString(),
+      });
     } finally {
       setIsLoading(false);
     }
-  }, [selectedDocumentId, conversationId]);
+  }, [selectedDocumentId, appendMessage]);
 
   /* ── Send dispatcher ── */
   const sendMessage = useCallback(async (question: string) => {
     if (!question.trim() || isLoading || isStreaming) return;
     setShowTemplates(false);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: 'user', content: question.trim(), timestamp: new Date() },
-    ]);
+    const convId = activeConversationId || crypto.randomUUID();
+    const userMsg: ConversationMessage = {
+      id: crypto.randomUUID(),
+      messageType: 'USER',
+      content: question.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
     setInput('');
     if (inputRef.current) { inputRef.current.style.height = 'auto'; }
 
+    await appendMessage(convId, userMsg);
+
     if (streamingMode) {
-      await sendStreaming(question.trim());
+      await sendStreaming(question.trim(), convId);
     } else {
-      await sendNormal(question.trim());
+      await sendNormal(question.trim(), convId);
     }
     inputRef.current?.focus();
-  }, [isLoading, isStreaming, streamingMode, sendStreaming, sendNormal]);
+  }, [isLoading, isStreaming, activeConversationId, streamingMode, appendMessage, sendStreaming, sendNormal]);
 
   const stopStream = () => {
     abortRef.current?.abort();
   };
 
-  const clearChat = () => {
-    setMessages([]);
-    setConversationId(undefined);
+  const handleNewChat = () => {
+    newChat();
     setShowTemplates(true);
     abortRef.current?.abort();
   };
@@ -482,7 +631,7 @@ const ChatView: React.FC = () => {
           <button
             onClick={() => setStreamingMode(!streamingMode)}
             className={clsx(
-              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all',
+              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all cursor-pointer',
               streamingMode
                 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
                 : 'bg-[#1e293b] border-[#334155] text-slate-400 hover:text-white'
@@ -497,8 +646,8 @@ const ChatView: React.FC = () => {
           {/* New chat */}
           {messages.length > 0 && (
             <button
-              onClick={clearChat}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-[#334155] hover:border-[#475569] px-3 py-1.5 rounded-lg transition-colors"
+              onClick={handleNewChat}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-[#334155] hover:border-[#475569] px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" /> New chat
             </button>
@@ -544,7 +693,7 @@ const ChatView: React.FC = () => {
                       <button
                         key={t.label}
                         onClick={() => sendMessage(t.prompt)}
-                        className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 hover:border-white/15 transition-all text-xs text-slate-200 hover:text-white group"
+                        className="text-left p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/8 hover:border-white/15 transition-all text-xs text-slate-200 hover:text-white group cursor-pointer"
                       >
                         <span className="font-medium block mb-0.5">{t.label}</span>
                         <span className="text-slate-500 text-[10px] line-clamp-2 group-hover:text-slate-400 transition-colors">{t.prompt.slice(0, 55)}…</span>
@@ -613,7 +762,7 @@ const ChatView: React.FC = () => {
           {isStreaming ? (
             <button
               onClick={stopStream}
-              className="flex-shrink-0 p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 rounded-xl transition-colors"
+              className="flex-shrink-0 p-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 rounded-xl transition-colors cursor-pointer"
               title="Stop generation"
             >
               <Square className="w-4 h-4" />
@@ -622,7 +771,7 @@ const ChatView: React.FC = () => {
             <button
               onClick={() => sendMessage(input)}
               disabled={!input.trim() || isBusy}
-              className="flex-shrink-0 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all shadow-sm shadow-indigo-500/25"
+              className="flex-shrink-0 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all shadow-sm shadow-indigo-500/25 cursor-pointer"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </button>

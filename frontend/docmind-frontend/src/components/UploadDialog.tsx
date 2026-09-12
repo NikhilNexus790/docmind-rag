@@ -5,7 +5,7 @@ import {
   File, FileImage, FileCode, FilePieChart, Trash2
 } from 'lucide-react';
 import { documentApi } from '../services/api';
-import { useApp } from '../context/AppContext';
+import { useDocumentStore } from '../store/documentStore';
 import type { UploadingFile } from '../types';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -41,7 +41,7 @@ function getFileIcon(name: string) {
 const UploadDialog: React.FC<UploadDialogProps> = ({ isOpen, onClose }) => {
   const [files, setFiles] = useState<UploadingFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const { fetchDocuments } = useApp();
+  const { fetchDocuments } = useDocumentStore();
 
   const onDrop = useCallback((accepted: File[]) => {
     const newFiles: UploadingFile[] = accepted.map((f) => ({

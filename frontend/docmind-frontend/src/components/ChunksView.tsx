@@ -4,7 +4,7 @@ import {
   Search, Hash, BookOpen, Database, Copy, Check, Tag,
 } from 'lucide-react';
 import { chatApi } from '../services/api';
-import { useApp } from '../context/AppContext';
+import { useDocumentStore } from '../store/documentStore';
 import type { CitationDto } from '../types';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -112,7 +112,7 @@ const ChunkCard: React.FC<{ chunk: CitationDto; index: number }> = ({ chunk, ind
 };
 
 const ChunksView: React.FC = () => {
-  const { selectedDocumentId, documents } = useApp();
+  const { selectedDocumentId, documents } = useDocumentStore();
   const [chunks, setChunks] = useState<CitationDto[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [query, setQuery] = useState('');
@@ -142,7 +142,7 @@ const ChunksView: React.FC = () => {
   useEffect(() => {
     if (selectedDocumentId) loadChunks();
     else { setChunks([]); setHasLoaded(false); }
-  }, [selectedDocumentId]);
+  }, [selectedDocumentId, loadChunks]);
 
   const filtered = textFilter
     ? chunks.filter((c) =>

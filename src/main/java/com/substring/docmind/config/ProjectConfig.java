@@ -1,9 +1,12 @@
 package com.substring.docmind.config;
 
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.ai.chat.client.ChatClient;
@@ -37,16 +40,20 @@ public class ProjectConfig {
                                                 Document Context is :
                         
                                                 {doc_context}
+                                                
+                                                Produce markdown output.
                         
                         
                         """)
-                .defaultAdvisors(new SimpleLoggerAdvisor(),MessageChatMemoryAdvisor.builder(memory).build())
+                .defaultAdvisors(new SimpleLoggerAdvisor(), MessageChatMemoryAdvisor.builder(memory).build())
                 .build();
     }
 
 
     @Bean
     public OpenAPI openAPI() {
+
+        String securitySchemeName = "bearerAuth";
 
         return new OpenAPI()
                 .info(
@@ -60,6 +67,20 @@ public class ProjectConfig {
                                         .email("support@substringtechnolgoies.com")
                                         .url("https://substringtechnologies.com")
                                 )
+
+                ).components(new Components()
+                        .addSecuritySchemes(
+                                securitySchemeName,
+                                new SecurityScheme()
+                                        .name(securitySchemeName)
+                                        .type(SecurityScheme.Type.HTTP)
+                                        .scheme("bearer")
+                                        .bearerFormat("JWT")
+                        ))
+
+                .addSecurityItem(
+                        new SecurityRequirement()
+                                .addList(securitySchemeName)
                 );
 
 

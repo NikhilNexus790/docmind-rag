@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import {
   Search, Loader2, FileText, ChevronDown, ChevronUp,
-  AlertCircle, Filter, Layers, SlidersHorizontal, Tag,
+  AlertCircle, Layers, SlidersHorizontal, Tag,
   BarChart2,
 } from 'lucide-react';
 import { chatApi } from '../services/api';
-import { useApp } from '../context/AppContext';
+import { useDocumentStore } from '../store/documentStore';
 import type { CitationDto, SearchResultDto } from '../types';
 import { clsx } from 'clsx';
 import toast from 'react-hot-toast';
@@ -112,7 +112,7 @@ const ResultCard: React.FC<{ match: CitationDto; index: number }> = ({ match, in
 };
 
 const SearchView: React.FC = () => {
-  const { selectedDocumentId, documents } = useApp();
+  const { selectedDocumentId, documents } = useDocumentStore();
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<SearchResultDto | null>(null);
