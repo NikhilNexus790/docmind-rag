@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -86,12 +87,12 @@ public class JpaChatMemory implements ChatMemory {
     @Transactional(readOnly = true)
     public List<Message> get(String conversationId) {
 
-        List<ChatMessage> all = chatMessageRepository.findAll();
+        List<ChatMessage> all = chatMessageRepository.findLastNMessages(conversationId,10);
         if (all.isEmpty()) {
             return Collections.emptyList();
         }
 
-        Collections.reverse(all);
+        all.sort(Comparator.comparing(ChatMessage::getCreatedAt).reversed());
 
 
         List<Message> springAIMessages = new ArrayList<>();

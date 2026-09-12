@@ -65,14 +65,15 @@ public class RagService {
 
         String contextText = buildContextString(similarDocuments);
 
-        String prompt = buildPrompt(request.getQuestion(), contextText);
+//        String prompt = buildPrompt(request.getQuestion(), contextText);
 
         //you have to use conversationId to remember the conversation
         //ChatMemory
         //ChatMemoryRepository
         String answer = this.chatClient
                 .prompt()
-                .user(prompt)
+                .system(s -> s.param("doc_context", contextText))
+                .user(request.getQuestion())
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, request.getConversationId()))
                 .call().content();
         long responseTime = System.currentTimeMillis() - startTime;
@@ -112,9 +113,10 @@ public class RagService {
                 user
         );
         String contextText = buildContextString(relevantDocuments);
-        String userPrompt = buildPrompt(requestDto.getQuestion(), contextText);
+//        String userPrompt = buildPrompt(requestDto.getQuestion(), contextText);
         return chatClient.prompt()
-                .user(userPrompt)
+                .system(s-> s.param("doc_context",contextText))
+                .user(requestDto.getQuestion())
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, requestDto.getConversationId()))
                 .stream()
                 .content();
