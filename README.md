@@ -75,6 +75,7 @@ The retrieval layer also limits the maximum number of retrieved chunks to avoid 
 
 ## Project Structure
 
+```text
 docmind-rag-based-project/
 ├── src/
 │   ├── main/
@@ -83,6 +84,7 @@ docmind-rag-based-project/
 │   └── test/
 ├── pom.xml
 └── README.md
+```
 
 ## Getting Started
 
