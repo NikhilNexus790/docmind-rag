@@ -216,8 +216,11 @@ public class RagService {
     //    this is very important document that fetches the similar result from vector db
     private List<Document> retrieveRelevantDocuments(@NotBlank(message = "Query cannot be empty") String query, UUID documentId, Integer topK, Double similaritySearch, User user) {
 
-        int effectiveTopK = (topK != null && topK > 0) ? topK : appProperties.getRag().getTopK();
+        int requestedTopK = (topK != null && topK > 0)
+                ? topK
+                : appProperties.getRag().getTopK();
 
+        int effectiveTopK = Math.min(requestedTopK, 10);
         double effectiveSimilarity = (similaritySearch != null) ? similaritySearch : appProperties.getRag().getSimilarityThreshold();
 
         SearchRequest.Builder searchRequestBuilder = SearchRequest.builder().
@@ -251,7 +254,15 @@ public class RagService {
 
         try {
             List<Document> documents = vectorStore.similaritySearch(searchRequestBuilder.build());
-            log.info("Retrieved {} chunks for query: '{}' (scoped docId: {})", documents.size(), query, documentId);
+
+            if (documents.isEmpty()) {
+                log.warn("No relevant document chunks found for query: '{}' (scoped docId: {})",
+                        query, documentId);
+            } else {
+                log.info("Retrieved {} chunks for query: '{}' (scoped docId: {})",
+                        documents.size(), query, documentId);
+            }
+
             return documents;
         } catch (Exception e) {
             log.error("Similarity search failed for query: '{}'", query, e);
